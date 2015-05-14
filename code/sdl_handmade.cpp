@@ -1124,7 +1124,7 @@ int main(int argc, char *argv[])
                                 // round deadzone processing.
                                 NewController->StickAverageX = SDLProcessGameControllerAxisValue(
                                     AxisLX, CONTROLLER_AXIS_LEFT_DEADZONE);
-                                NewController->StickAverageY = SDLProcessGameControllerAxisValue(
+                                NewController->StickAverageY = -SDLProcessGameControllerAxisValue(
                                     AxisLY, CONTROLLER_AXIS_LEFT_DEADZONE);
                                 if((NewController->StickAverageX != 0.0f) ||
                                    (NewController->StickAverageY != 0.0f))

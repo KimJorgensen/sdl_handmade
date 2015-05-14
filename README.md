@@ -21,7 +21,6 @@ Compile it with `./build.sh` and run it with `./handmade.sh`.
 
 * Clean-up audio code
 * Correct mouse X/Y input according to image offset and stretching
-* Test controller input handling
 * Support 32 bit build
 
 # Licensing/Copyright/Author
