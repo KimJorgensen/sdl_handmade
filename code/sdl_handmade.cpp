@@ -875,9 +875,27 @@ SDLDebugSyncDisplay(sdl_offscreen_buffer *Backbuffer,
 
 #endif
 
-int main(int argc, char *argv[])
+int
+ThreadProc(void *parameter)
+{
+    char *StringToPrint = (char *)parameter;
+    for(;;)
+    {
+        printf("%s", StringToPrint);
+        SDL_Delay(1000);
+    }
+
+//    return(0);
+}
+
+int
+main(int argc, char *argv[])
 {
     sdl_state SDLState = {};
+
+    char *Param = "Thread started!\n";
+    SDL_Thread *ThreadHandle = SDL_CreateThread(ThreadProc, "thread", Param);
+    SDL_DetachThread(ThreadHandle);
 
     GlobalPerfCountFrequency = SDL_GetPerformanceFrequency();
 
