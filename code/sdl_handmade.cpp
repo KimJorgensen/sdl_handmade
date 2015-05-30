@@ -880,22 +880,33 @@ struct work_queue_entry
     char *StringToPrint;
 };
 
-global_variable uint32 NextEntryToDo;
-global_variable uint32 EntryCount;
+global_variable unsigned int volatile EntryCompletionCount;
+global_variable unsigned int volatile NextEntryToDo;
+global_variable unsigned int volatile EntryCount;
 work_queue_entry Entries[256];
 
+// TODO(casey): Double-check the write ordering stuff on the CPU
+#define CompletePastWritesBeforeFutureWrites SDL_CompilerBarrier(); _mm_sfence()
+#define CompletePastReadsBeforeFutureReads SDL_CompilerBarrier()
+
 internal void
-PushString(char *String)
+PushString(SDL_sem *SemaphoreHandle, char *String)
 {
     Assert(EntryCount < ArrayCount(Entries));
 
-    // TODO(casey): These writes are not in order!
-    work_queue_entry *Entry = Entries + EntryCount++;
+    work_queue_entry *Entry = Entries + EntryCount;
     Entry->StringToPrint = String;
+
+    CompletePastWritesBeforeFutureWrites;
+
+    ++EntryCount;
+
+    SDL_SemPost(SemaphoreHandle);
 }
 
 struct sdl_thread_info
 {
+    SDL_sem *SemaphoreHandle;
     int LogicalThreadIndex;
 };
 
@@ -908,14 +919,17 @@ ThreadProc(void *Parameter)
     {
         if(NextEntryToDo < EntryCount)
         {
-            // TODO(casey): This line is not interlocked, so two threads could see the same value.
-            // TODO(casey): Compiler doesn't know that multiple threads could write this value!
-            int EntryIndex = NextEntryToDo++;
-
-            // TODO(casey): These reads are not in order!
+            int EntryIndex = SDL_AtomicAdd((SDL_atomic_t *)&NextEntryToDo, 1);
+            CompletePastReadsBeforeFutureReads;
             work_queue_entry *Entry = Entries + EntryIndex;
 
             printf("Thread %u: %s\n", ThreadInfo->LogicalThreadIndex, Entry->StringToPrint);
+
+            SDL_AtomicIncRef((SDL_atomic_t *)&EntryCompletionCount);
+        }
+        else
+        {
+            SDL_SemWait(ThreadInfo->SemaphoreHandle);
         }
     }
 
@@ -927,28 +941,50 @@ main(int argc, char *argv[])
 {
     sdl_state SDLState = {};
 
-    PushString("String 0");
-    PushString("String 1");
-    PushString("String 2");
-    PushString("String 3");
-    PushString("String 4");
-    PushString("String 5");
-    PushString("String 6");
-    PushString("String 7");
-    PushString("String 8");
-    PushString("String 9");
+    sdl_thread_info ThreadInfo[8];
 
-    sdl_thread_info ThreadInfo[4];
-    for(int ThreadIndex = 0;
-        ThreadIndex < ArrayCount(ThreadInfo);
+    uint32 InitialCount = 0;
+    uint32 ThreadCount = ArrayCount(ThreadInfo);
+    SDL_sem *SemaphoreHandle = SDL_CreateSemaphore(InitialCount);
+
+    for(uint32 ThreadIndex = 0;
+        ThreadIndex < ThreadCount;
         ++ThreadIndex)
     {
         sdl_thread_info *Info = ThreadInfo + ThreadIndex;
+        Info->SemaphoreHandle = SemaphoreHandle;
         Info->LogicalThreadIndex = ThreadIndex;
 
         SDL_Thread *ThreadHandle = SDL_CreateThread(ThreadProc, 0, Info);
         SDL_DetachThread(ThreadHandle);
     }
+
+    PushString(SemaphoreHandle, "String A0");
+    PushString(SemaphoreHandle, "String A1");
+    PushString(SemaphoreHandle, "String A2");
+    PushString(SemaphoreHandle, "String A3");
+    PushString(SemaphoreHandle, "String A4");
+    PushString(SemaphoreHandle, "String A5");
+    PushString(SemaphoreHandle, "String A6");
+    PushString(SemaphoreHandle, "String A7");
+    PushString(SemaphoreHandle, "String A8");
+    PushString(SemaphoreHandle, "String A9");
+
+    SDL_Delay(5000);
+
+    PushString(SemaphoreHandle, "String B0");
+    PushString(SemaphoreHandle, "String B1");
+    PushString(SemaphoreHandle, "String B2");
+    PushString(SemaphoreHandle, "String B3");
+    PushString(SemaphoreHandle, "String B4");
+    PushString(SemaphoreHandle, "String B5");
+    PushString(SemaphoreHandle, "String B6");
+    PushString(SemaphoreHandle, "String B7");
+    PushString(SemaphoreHandle, "String B8");
+    PushString(SemaphoreHandle, "String B9");
+
+    // TODO(casey): Turn this into something waitable!
+    while(EntryCount != EntryCompletionCount);
 
     GlobalPerfCountFrequency = SDL_GetPerformanceFrequency();
 
