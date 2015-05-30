@@ -875,39 +875,84 @@ SDLDebugSyncDisplay(sdl_offscreen_buffer *Backbuffer,
 
 #endif
 
-struct work_queue_entry
+struct platform_work_queue_entry
 {
-    char *StringToPrint;
+    platform_work_queue_callback *Callback;
+    void *Data;
 };
 
-global_variable unsigned int volatile EntryCompletionCount;
-global_variable unsigned int volatile NextEntryToDo;
-global_variable unsigned int volatile EntryCount;
-work_queue_entry Entries[256];
+struct platform_work_queue
+{
+    unsigned int volatile CompletionGoal;
+    unsigned int volatile CompletionCount;
 
-// TODO(casey): Double-check the write ordering stuff on the CPU
-#define CompletePastWritesBeforeFutureWrites SDL_CompilerBarrier(); _mm_sfence()
-#define CompletePastReadsBeforeFutureReads SDL_CompilerBarrier()
+    unsigned int volatile NextEntryToWrite;
+    unsigned int volatile NextEntryToRead;
+    SDL_sem *SemaphoreHandle;
+
+    platform_work_queue_entry Entries[256];
+};
 
 internal void
-PushString(SDL_sem *SemaphoreHandle, char *String)
+SDLAddEntry(platform_work_queue *Queue, platform_work_queue_callback *Callback, void *Data)
 {
-    Assert(EntryCount < ArrayCount(Entries));
+    // TODO(casey): Switch to InterlockedCompareExchange eventually
+    // so that any thread can add?
+    uint32 NewNextEntryToWrite = (Queue->NextEntryToWrite + 1) % ArrayCount(Queue->Entries);
+    Assert(NewNextEntryToWrite != Queue->NextEntryToRead);
+    platform_work_queue_entry *Entry = Queue->Entries + Queue->NextEntryToWrite;
+    Entry->Callback = Callback;
+    Entry->Data = Data;
+    ++Queue->CompletionGoal;
+    SDL_CompilerBarrier();
+    _mm_sfence();
+    Queue->NextEntryToWrite = NewNextEntryToWrite;
+    SDL_SemPost(Queue->SemaphoreHandle);
+}
 
-    work_queue_entry *Entry = Entries + EntryCount;
-    Entry->StringToPrint = String;
+internal bool32
+SDLDoNextWorkQueueEntry(platform_work_queue *Queue)
+{
+    bool32 WeShouldSleep = false;
 
-    CompletePastWritesBeforeFutureWrites;
+    uint32 OriginalNextEntryToRead = Queue->NextEntryToRead;
+    uint32 NewNextEntryToRead = (OriginalNextEntryToRead + 1) % ArrayCount(Queue->Entries);
+    if(OriginalNextEntryToRead != Queue->NextEntryToWrite)
+    {
+        SDL_bool WasSet = SDL_AtomicCAS((SDL_atomic_t *)&Queue->NextEntryToRead,
+                                        OriginalNextEntryToRead,
+                                        NewNextEntryToRead);
+        if(WasSet)
+        {
+            platform_work_queue_entry Entry = Queue->Entries[OriginalNextEntryToRead];
+            Entry.Callback(Queue, Entry.Data);
+            SDL_AtomicIncRef((SDL_atomic_t *)&Queue->CompletionCount);
+        }
+    }
+    else
+    {
+        WeShouldSleep = true;
+    }
 
-    ++EntryCount;
+    return(WeShouldSleep);
+}
 
-    SDL_SemPost(SemaphoreHandle);
+internal void
+SDLCompleteAllWork(platform_work_queue *Queue)
+{
+    while(Queue->CompletionGoal != Queue->CompletionCount)
+    {
+        SDLDoNextWorkQueueEntry(Queue);
+    }
+
+    Queue->CompletionGoal = 0;
+    Queue->CompletionCount = 0;
 }
 
 struct sdl_thread_info
 {
-    SDL_sem *SemaphoreHandle;
     int LogicalThreadIndex;
+    platform_work_queue *Queue;
 };
 
 int
@@ -917,23 +962,18 @@ ThreadProc(void *Parameter)
 
     for(;;)
     {
-        if(NextEntryToDo < EntryCount)
+        if(SDLDoNextWorkQueueEntry(ThreadInfo->Queue))
         {
-            int EntryIndex = SDL_AtomicAdd((SDL_atomic_t *)&NextEntryToDo, 1);
-            CompletePastReadsBeforeFutureReads;
-            work_queue_entry *Entry = Entries + EntryIndex;
-
-            printf("Thread %u: %s\n", ThreadInfo->LogicalThreadIndex, Entry->StringToPrint);
-
-            SDL_AtomicIncRef((SDL_atomic_t *)&EntryCompletionCount);
-        }
-        else
-        {
-            SDL_SemWait(ThreadInfo->SemaphoreHandle);
+            SDL_SemWait(ThreadInfo->Queue->SemaphoreHandle);
         }
     }
 
 //    return(0);
+}
+
+internal PLATFORM_WORK_QUEUE_CALLBACK(DoWorkerWork)
+{
+    printf("Thread %lu: %s\n", SDL_ThreadID(), (char *)Data);
 }
 
 int
@@ -941,50 +981,49 @@ main(int argc, char *argv[])
 {
     sdl_state SDLState = {};
 
-    sdl_thread_info ThreadInfo[8];
+    sdl_thread_info ThreadInfo[7];
+
+    platform_work_queue Queue = {};
 
     uint32 InitialCount = 0;
     uint32 ThreadCount = ArrayCount(ThreadInfo);
-    SDL_sem *SemaphoreHandle = SDL_CreateSemaphore(InitialCount);
+    Queue.SemaphoreHandle = SDL_CreateSemaphore(InitialCount);
 
     for(uint32 ThreadIndex = 0;
         ThreadIndex < ThreadCount;
         ++ThreadIndex)
     {
         sdl_thread_info *Info = ThreadInfo + ThreadIndex;
-        Info->SemaphoreHandle = SemaphoreHandle;
+        Info->Queue = &Queue;
         Info->LogicalThreadIndex = ThreadIndex;
 
         SDL_Thread *ThreadHandle = SDL_CreateThread(ThreadProc, 0, Info);
         SDL_DetachThread(ThreadHandle);
     }
 
-    PushString(SemaphoreHandle, "String A0");
-    PushString(SemaphoreHandle, "String A1");
-    PushString(SemaphoreHandle, "String A2");
-    PushString(SemaphoreHandle, "String A3");
-    PushString(SemaphoreHandle, "String A4");
-    PushString(SemaphoreHandle, "String A5");
-    PushString(SemaphoreHandle, "String A6");
-    PushString(SemaphoreHandle, "String A7");
-    PushString(SemaphoreHandle, "String A8");
-    PushString(SemaphoreHandle, "String A9");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String A0");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String A1");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String A2");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String A3");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String A4");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String A5");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String A6");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String A7");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String A8");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String A9");
 
-    SDL_Delay(5000);
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String B0");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String B1");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String B2");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String B3");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String B4");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String B5");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String B6");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String B7");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String B8");
+    SDLAddEntry(&Queue, DoWorkerWork, (void *)"String B9");
 
-    PushString(SemaphoreHandle, "String B0");
-    PushString(SemaphoreHandle, "String B1");
-    PushString(SemaphoreHandle, "String B2");
-    PushString(SemaphoreHandle, "String B3");
-    PushString(SemaphoreHandle, "String B4");
-    PushString(SemaphoreHandle, "String B5");
-    PushString(SemaphoreHandle, "String B6");
-    PushString(SemaphoreHandle, "String B7");
-    PushString(SemaphoreHandle, "String B8");
-    PushString(SemaphoreHandle, "String B9");
-
-    // TODO(casey): Turn this into something waitable!
-    while(EntryCount != EntryCompletionCount);
+    SDLCompleteAllWork(&Queue);
 
     GlobalPerfCountFrequency = SDL_GetPerformanceFrequency();
 
@@ -1012,8 +1051,8 @@ main(int argc, char *argv[])
     SDL_Window *Window = SDL_CreateWindow("Handmade Hero",
                                           SDL_WINDOWPOS_UNDEFINED,
                                           SDL_WINDOWPOS_UNDEFINED,
-                                          980,
-                                          560,
+                                          1920,
+                                          1080,
                                           SDL_WINDOW_RESIZABLE);
     if(Window)
     {
@@ -1025,7 +1064,8 @@ main(int argc, char *argv[])
                                                     SDL_RENDERER_PRESENTVSYNC);
         if (Renderer)
         {
-            SDLResizeTexture(&GlobalBackbuffer, Renderer, 960, 540);
+            //SDLResizeTexture(&GlobalBackbuffer, Renderer, 960, 540);
+            SDLResizeTexture(&GlobalBackbuffer, Renderer, 1920, 1080);
 
             sdl_sound_output SoundOutput = {};
 
@@ -1037,7 +1077,7 @@ main(int argc, char *argv[])
             {
                 MonitorRefreshHz = Mode.refresh_rate;
             }
-            real32 GameUpdateHz = (MonitorRefreshHz / 2.0f);
+            real32 GameUpdateHz = (real32)MonitorRefreshHz; // (MonitorRefreshHz / 2.0f);
             real32 TargetSecondsPerFrame = 1.0f / (real32)GameUpdateHz;
 
             // TODO(casey): Make this like sixty seconds?
@@ -1087,6 +1127,9 @@ main(int argc, char *argv[])
             game_memory GameMemory = {};
             GameMemory.PermanentStorageSize = Megabytes(64);
             GameMemory.TransientStorageSize = Gigabytes(1);
+            GameMemory.HighPriorityQueue = &Queue;
+            GameMemory.PlatformAddEntry = SDLAddEntry;
+            GameMemory.PlatformCompleteAllWork = SDLCompleteAllWork;
             GameMemory.DEBUGPlatformFreeFileMemory = DEBUGPlatformFreeFileMemory;
             GameMemory.DEBUGPlatformReadEntireFile = DEBUGPlatformReadEntireFile;
             GameMemory.DEBUGPlatformWriteEntireFile = DEBUGPlatformWriteEntireFile;
@@ -1454,7 +1497,7 @@ main(int argc, char *argv[])
                         OldInput = Temp;
                         // TODO(casey): Should I clear these here?
 
-#if 0
+#if 1
                         uint64 EndCycleCount = __rdtsc();
                         uint64 CyclesElapsed = EndCycleCount - LastCycleCount;
                         LastCycleCount = EndCycleCount;
