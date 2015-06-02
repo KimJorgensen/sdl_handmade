@@ -372,14 +372,14 @@ SDLResizeTexture(sdl_offscreen_buffer *Buffer, SDL_Renderer *Renderer, int Width
                                         Buffer->Width,
                                         Buffer->Height);
 
-	int BitmapMemorySize = (Buffer->Width*Buffer->Height)*BytesPerPixel;
+    Buffer->Pitch = Align16(Width*BytesPerPixel);
+    int BitmapMemorySize = (Buffer->Pitch*Buffer->Height);
     Buffer->Memory = mmap(0,
                           BitmapMemorySize,
                           PROT_READ | PROT_WRITE,
                           MAP_PRIVATE | MAP_ANONYMOUS,
                           -1,
                           0);
-    Buffer->Pitch = Width*BytesPerPixel;
 
     // TODO(casey): Probably clear this to black
 }
@@ -905,7 +905,6 @@ SDLAddEntry(platform_work_queue *Queue, platform_work_queue_callback *Callback, 
     Entry->Data = Data;
     ++Queue->CompletionGoal;
     SDL_CompilerBarrier();
-    _mm_sfence();
     Queue->NextEntryToWrite = NewNextEntryToWrite;
     SDL_SemPost(Queue->SemaphoreHandle);
 }
