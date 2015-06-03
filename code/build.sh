@@ -1,7 +1,7 @@
 #!/bin/bash
 mkdir -p ../build
 pushd ../build
-CommonFlags="-DDEBUG -g -O2 -Wall -Werror -Wno-write-strings -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-function -Wno-sign-compare -Wno-unused-result -Wno-strict-aliasing -std=gnu++11 -fno-rtti -fno-exceptions -DHANDMADE_INTERNAL=1 -DHANDMADE_SLOW=1 -DHANDMADE_SDL=1"
+CommonFlags="-DDEBUG -g -O2 -Wall -Werror -Wno-write-strings -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-function -Wno-sign-compare -Wno-unused-result -Wno-strict-aliasing -Wno-switch -std=gnu++11 -fno-rtti -fno-exceptions -DHANDMADE_INTERNAL=1 -DHANDMADE_SLOW=1 -DHANDMADE_SDL=1"
 
 # Build a 64-bit version
 c++ $CommonFlags ../code/handmade.cpp -fPIC -shared -o handmade.so.temp
