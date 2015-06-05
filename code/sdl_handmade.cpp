@@ -948,22 +948,16 @@ SDLCompleteAllWork(platform_work_queue *Queue)
     Queue->CompletionCount = 0;
 }
 
-struct sdl_thread_info
-{
-    int LogicalThreadIndex;
-    platform_work_queue *Queue;
-};
-
 int
 ThreadProc(void *Parameter)
 {
-    sdl_thread_info *ThreadInfo = (sdl_thread_info *)Parameter;
+    platform_work_queue *Queue = (platform_work_queue *)Parameter;
 
     for(;;)
     {
-        if(SDLDoNextWorkQueueEntry(ThreadInfo->Queue))
+        if(SDLDoNextWorkQueueEntry(Queue))
         {
-            SDL_SemWait(ThreadInfo->Queue->SemaphoreHandle);
+            SDL_SemWait(Queue->SemaphoreHandle);
         }
     }
 
@@ -975,31 +969,39 @@ internal PLATFORM_WORK_QUEUE_CALLBACK(DoWorkerWork)
     printf("Thread %lu: %s\n", SDL_ThreadID(), (char *)Data);
 }
 
-int
-main(int argc, char *argv[])
+internal void
+SDLMakeQueue(platform_work_queue *Queue, uint32 ThreadCount)
 {
-    sdl_state SDLState = {};
+    Queue->CompletionGoal = 0;
+    Queue->CompletionCount = 0;
 
-    sdl_thread_info ThreadInfo[7];
-
-    platform_work_queue Queue = {};
+    Queue->NextEntryToWrite = 0;
+    Queue->NextEntryToRead = 0;
 
     uint32 InitialCount = 0;
-    uint32 ThreadCount = ArrayCount(ThreadInfo);
-    Queue.SemaphoreHandle = SDL_CreateSemaphore(InitialCount);
+    Queue->SemaphoreHandle = SDL_CreateSemaphore(InitialCount);
 
     for(uint32 ThreadIndex = 0;
         ThreadIndex < ThreadCount;
         ++ThreadIndex)
     {
-        sdl_thread_info *Info = ThreadInfo + ThreadIndex;
-        Info->Queue = &Queue;
-        Info->LogicalThreadIndex = ThreadIndex;
-
-        SDL_Thread *ThreadHandle = SDL_CreateThread(ThreadProc, 0, Info);
+        SDL_Thread *ThreadHandle = SDL_CreateThread(ThreadProc, 0, Queue);
         SDL_DetachThread(ThreadHandle);
     }
+}
 
+int
+main(int argc, char *argv[])
+{
+    sdl_state SDLState = {};
+
+    platform_work_queue HighPriorityQueue = {};
+    SDLMakeQueue(&HighPriorityQueue, 6);
+
+    platform_work_queue LowPriorityQueue = {};
+    SDLMakeQueue(&LowPriorityQueue, 2);
+
+#if 0
     SDLAddEntry(&Queue, DoWorkerWork, (void *)"String A0");
     SDLAddEntry(&Queue, DoWorkerWork, (void *)"String A1");
     SDLAddEntry(&Queue, DoWorkerWork, (void *)"String A2");
@@ -1023,6 +1025,7 @@ main(int argc, char *argv[])
     SDLAddEntry(&Queue, DoWorkerWork, (void *)"String B9");
 
     SDLCompleteAllWork(&Queue);
+#endif
 
     GlobalPerfCountFrequency = SDL_GetPerformanceFrequency();
 
@@ -1124,9 +1127,10 @@ main(int argc, char *argv[])
 #endif
 
             game_memory GameMemory = {};
-            GameMemory.PermanentStorageSize = Megabytes(64);
+            GameMemory.PermanentStorageSize = Megabytes(256);
             GameMemory.TransientStorageSize = Gigabytes(1);
-            GameMemory.HighPriorityQueue = &Queue;
+            GameMemory.HighPriorityQueue = &HighPriorityQueue;
+            GameMemory.LowPriorityQueue = &LowPriorityQueue;
             GameMemory.PlatformAddEntry = SDLAddEntry;
             GameMemory.PlatformCompleteAllWork = SDLCompleteAllWork;
             GameMemory.DEBUGPlatformFreeFileMemory = DEBUGPlatformFreeFileMemory;
