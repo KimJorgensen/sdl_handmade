@@ -407,6 +407,7 @@ SDLDisplayBufferInWindow(sdl_offscreen_buffer *Buffer,
     }
     else
     {
+#if 0
         int OffsetX = 10;
         int OffsetY = 10;
 
@@ -418,6 +419,10 @@ SDLDisplayBufferInWindow(sdl_offscreen_buffer *Buffer,
             {OffsetX + Buffer->Width, 0, WindowWidth, WindowHeight}
         };
         SDL_RenderFillRects(Renderer, BlackRects, ArrayCount(BlackRects));
+#else
+        int OffsetX = 0;
+        int OffsetY = 0;
+#endif
 
         // NOTE(casey): For prototyping purposes, we're going to always blit
         // 1-to-1 pixels to make sure we don't introduce artifacts with
