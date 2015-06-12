@@ -1365,8 +1365,6 @@ main(int argc, char *argv[])
                             }
                         }
 
-                        thread_context Thread = {};
-
                         game_offscreen_buffer Buffer = {};
                         // NOTE: GlobalBackbuffer is top-down, whereas the game is bottom-up
                         Buffer.Memory = ((uint8*)GlobalBackbuffer.Memory) +
@@ -1389,7 +1387,7 @@ main(int argc, char *argv[])
 
                         if(Game.UpdateAndRender)
                         {
-                            Game.UpdateAndRender(&Thread, &GameMemory, NewInput, &Buffer);
+                            Game.UpdateAndRender(&GameMemory, NewInput, &Buffer);
                             HandleDebugCycleCounters(&GameMemory);
                         }
 
@@ -1427,7 +1425,7 @@ main(int argc, char *argv[])
                         SoundBuffer.Samples = Samples;
                         if(Game.GetSoundSamples)
                         {
-                            Game.GetSoundSamples(&Thread, &GameMemory, &SoundBuffer);
+                            Game.GetSoundSamples(&GameMemory, &SoundBuffer);
                         }
 
 #if HANDMADE_INTERNAL
