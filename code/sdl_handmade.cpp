@@ -1084,7 +1084,7 @@ main(int argc, char *argv[])
             {
                 MonitorRefreshHz = Mode.refresh_rate;
             }
-            real32 GameUpdateHz = (real32)MonitorRefreshHz; // (MonitorRefreshHz / 2.0f);
+            real32 GameUpdateHz = (real32)(MonitorRefreshHz / 2.0f);
             real32 TargetSecondsPerFrame = 1.0f / (real32)GameUpdateHz;
 
             // TODO(casey): Make this like sixty seconds?
