@@ -1058,8 +1058,8 @@ main(int argc, char *argv[])
     SDL_Window *Window = SDL_CreateWindow("Handmade Hero",
                                           SDL_WINDOWPOS_UNDEFINED,
                                           SDL_WINDOWPOS_UNDEFINED,
-                                          1920,
-                                          1080,
+                                          960,
+                                          540,
                                           SDL_WINDOW_RESIZABLE);
     if(Window)
     {
@@ -1071,8 +1071,8 @@ main(int argc, char *argv[])
                                                     SDL_RENDERER_PRESENTVSYNC);
         if (Renderer)
         {
-            //SDLResizeTexture(&GlobalBackbuffer, Renderer, 960, 540);
-            SDLResizeTexture(&GlobalBackbuffer, Renderer, 1920, 1080);
+            SDLResizeTexture(&GlobalBackbuffer, Renderer, 960, 540);
+            //SDLResizeTexture(&GlobalBackbuffer, Renderer, 1920, 1080);
 
             sdl_sound_output SoundOutput = {};
 
@@ -1212,6 +1212,9 @@ main(int argc, char *argv[])
                     time_t NewDLLWriteTime = SDLGetLastWriteTime(SourceGameCodeDLLFullPath);
                     if(NewDLLWriteTime != Game.DLLLastWriteTime)
                     {
+                        SDLCompleteAllWork(&HighPriorityQueue);
+                        SDLCompleteAllWork(&LowPriorityQueue);
+
                         SDLUnloadGameCode(&Game);
                         Game = SDLLoadGameCode(SourceGameCodeDLLFullPath);
                         NewInput->ExecutableReloaded = true;
