@@ -1058,8 +1058,8 @@ main(int argc, char *argv[])
     SDL_Window *Window = SDL_CreateWindow("Handmade Hero",
                                           SDL_WINDOWPOS_UNDEFINED,
                                           SDL_WINDOWPOS_UNDEFINED,
-                                          960,
-                                          540,
+                                          1920,
+                                          1080,
                                           SDL_WINDOW_RESIZABLE);
     if(Window)
     {
@@ -1071,8 +1071,8 @@ main(int argc, char *argv[])
                                                     SDL_RENDERER_PRESENTVSYNC);
         if (Renderer)
         {
-            SDLResizeTexture(&GlobalBackbuffer, Renderer, 960, 540);
-            //SDLResizeTexture(&GlobalBackbuffer, Renderer, 1920, 1080);
+            //SDLResizeTexture(&GlobalBackbuffer, Renderer, 960, 540);
+            SDLResizeTexture(&GlobalBackbuffer, Renderer, 1920, 1080);
 
             sdl_sound_output SoundOutput = {};
 
@@ -1122,7 +1122,8 @@ main(int argc, char *argv[])
 
             // TODO(casey): Pool with bitmap VirtualAlloc
             // NOTE: calloc() allocates memory and clears it to zero. It accepts the number of things being allocated and their size.
-            int16 *Samples = (int16 *)calloc(SoundOutput.SamplesPerSecond, SoundOutput.BytesPerSample);
+            u32 MaxPossibleOverrun = 4;
+            int16 *Samples = (int16 *)calloc(SoundOutput.SamplesPerSecond + MaxPossibleOverrun, SoundOutput.BytesPerSample);
 
 #if HANDMADE_INTERNAL
             // TODO: This will fail gently on 32-bit at the moment, but we should probably fix it.
