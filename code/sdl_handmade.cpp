@@ -1425,7 +1425,7 @@ main(int argc, char *argv[])
 
                         game_sound_output_buffer SoundBuffer = {};
                         SoundBuffer.SamplesPerSecond = SoundOutput.SamplesPerSecond;
-                        SoundBuffer.SampleCount = BytesToWrite / SoundOutput.BytesPerSample;
+                        SoundBuffer.SampleCount = Align8(BytesToWrite / SoundOutput.BytesPerSample);
                         SoundBuffer.Samples = Samples;
                         if(Game.GetSoundSamples)
                         {
