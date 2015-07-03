@@ -1121,8 +1121,9 @@ main(int argc, char *argv[])
 #endif
 
             // TODO(casey): Pool with bitmap VirtualAlloc
+            // TODO(casey): Remove MaxPossibleOverrun?
             // NOTE: calloc() allocates memory and clears it to zero. It accepts the number of things being allocated and their size.
-            u32 MaxPossibleOverrun = 4;
+            u32 MaxPossibleOverrun = 8;
             int16 *Samples = (int16 *)calloc(SoundOutput.SamplesPerSecond + MaxPossibleOverrun, SoundOutput.BytesPerSample);
 
 #if HANDMADE_INTERNAL
@@ -1276,7 +1277,7 @@ main(int argc, char *argv[])
                             {
                                 NewController->IsConnected = true;
                                 NewController->IsAnalog = OldController->IsAnalog;
-                           
+
                                 // NOTE(casey): This controller is plugged in
                                 int16 AxisLX = SDL_GameControllerGetAxis(Controller, SDL_CONTROLLER_AXIS_LEFTX);
                                 int16 AxisLY = SDL_GameControllerGetAxis(Controller, SDL_CONTROLLER_AXIS_LEFTY);
@@ -1401,7 +1402,7 @@ main(int argc, char *argv[])
                         uint32 QueuedAudioBytes = SDL_GetQueuedAudioSize(1);
 
                         /* TODO: Improve sound output computation
-                           
+
                            This is an attempt to use SDL_QueueAudio
                            instead of Handmade Penguin's ring buffer.
                         */
@@ -1426,6 +1427,7 @@ main(int argc, char *argv[])
                         game_sound_output_buffer SoundBuffer = {};
                         SoundBuffer.SamplesPerSecond = SoundOutput.SamplesPerSecond;
                         SoundBuffer.SampleCount = Align8(BytesToWrite / SoundOutput.BytesPerSample);
+                        BytesToWrite = SoundBuffer.SampleCount*SoundOutput.BytesPerSample;
                         SoundBuffer.Samples = Samples;
                         if(Game.GetSoundSamples)
                         {
