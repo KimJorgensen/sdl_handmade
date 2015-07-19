@@ -995,6 +995,30 @@ SDLMakeQueue(platform_work_queue *Queue, uint32 ThreadCount)
     }
 }
 
+internal PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(SDLGetAllFilesOfTypeBegin)
+{
+    platform_file_group FileGroup = {};
+
+    return(FileGroup);
+}
+
+internal PLATFORM_GET_ALL_FILE_OF_TYPE_END(SDLGetAllFilesOfTypeEnd)
+{
+}
+
+internal PLATFORM_OPEN_FILE(SDLOpenFile)
+{
+    return(0);
+}
+
+internal PLATFORM_READ_DATA_FROM_FILE(SDLReadDataFromFile)
+{
+}
+
+internal PLATFORM_FILE_ERROR(SDLFileError)
+{
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -1138,11 +1162,18 @@ main(int argc, char *argv[])
             GameMemory.TransientStorageSize = Gigabytes(1);
             GameMemory.HighPriorityQueue = &HighPriorityQueue;
             GameMemory.LowPriorityQueue = &LowPriorityQueue;
-            GameMemory.PlatformAddEntry = SDLAddEntry;
-            GameMemory.PlatformCompleteAllWork = SDLCompleteAllWork;
-            GameMemory.DEBUGPlatformFreeFileMemory = DEBUGPlatformFreeFileMemory;
-            GameMemory.DEBUGPlatformReadEntireFile = DEBUGPlatformReadEntireFile;
-            GameMemory.DEBUGPlatformWriteEntireFile = DEBUGPlatformWriteEntireFile;
+            GameMemory.PlatformAPI.AddEntry = SDLAddEntry;
+            GameMemory.PlatformAPI.CompleteAllWork = SDLCompleteAllWork;
+
+            GameMemory.PlatformAPI.GetAllFilesOfTypeBegin = SDLGetAllFilesOfTypeBegin;
+            GameMemory.PlatformAPI.GetAllFilesOfTypeEnd = SDLGetAllFilesOfTypeEnd;
+            GameMemory.PlatformAPI.OpenFile = SDLOpenFile;
+            GameMemory.PlatformAPI.ReadDataFromFile = SDLReadDataFromFile;
+            GameMemory.PlatformAPI.FileError = SDLFileError;
+
+            GameMemory.PlatformAPI.DEBUGFreeFileMemory = DEBUGPlatformFreeFileMemory;
+            GameMemory.PlatformAPI.DEBUGReadEntireFile = DEBUGPlatformReadEntireFile;
+            GameMemory.PlatformAPI.DEBUGWriteEntireFile = DEBUGPlatformWriteEntireFile;
 
             // TODO(casey): Handle various memory footprints (USING
             // SYSTEM METRICS)
