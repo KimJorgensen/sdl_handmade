@@ -29,9 +29,11 @@
 #include "handmade_platform.h"
 
 #include <SDL.h>
+#include <dirent.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <fnmatch.h>
 #include <dlfcn.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -995,9 +997,39 @@ SDLMakeQueue(platform_work_queue *Queue, uint32 ThreadCount)
     }
 }
 
+struct sdl_platform_file_handle
+{
+    platform_file_handle H;
+    int SDLHandle;
+};
+
 internal PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(SDLGetAllFilesOfTypeBegin)
 {
     platform_file_group FileGroup = {};
+
+    char FilePattern[64];
+    sprintf(FilePattern, "*.%s", Type);
+
+    DIR *Dir = opendir(".");
+    struct dirent *DirEntry;
+
+    if(Dir)
+    {
+        while((DirEntry = readdir(Dir)) != NULL)
+        {
+            char *filename = DirEntry->d_name;
+
+            printf("%s\n", filename);
+
+            if(fnmatch(FilePattern, DirEntry->d_name, 0) == 0)
+            {
+                // TODO: Store filename
+                FileGroup.FileCount++;
+            }
+        }
+
+        closedir(Dir);
+    }
 
     return(FileGroup);
 }
@@ -1008,16 +1040,66 @@ internal PLATFORM_GET_ALL_FILE_OF_TYPE_END(SDLGetAllFilesOfTypeEnd)
 
 internal PLATFORM_OPEN_FILE(SDLOpenFile)
 {
-    return(0);
-}
+    // TODO(casey): Actually implement this!
+    char *FileName = "test.hha";
 
-internal PLATFORM_READ_DATA_FROM_FILE(SDLReadDataFromFile)
-{
+    // TODO(casey): If we want, someday, make an actual arena
+    sdl_platform_file_handle *Result = (sdl_platform_file_handle *)malloc(
+        sizeof(sdl_platform_file_handle));
+
+    if(Result)
+    {
+        Result->SDLHandle = open(FileName, O_RDONLY);
+        Result->H.NoErrors = (Result->SDLHandle != -1);
+    }
+
+    return((platform_file_handle *)Result);
 }
 
 internal PLATFORM_FILE_ERROR(SDLFileError)
 {
+#if HANDMADE_INTERNAL
+    printf("SDL FILE ERROR: %s\n", Message);
+#endif
+
+    Handle->NoErrors = false;
 }
+
+internal PLATFORM_READ_DATA_FROM_FILE(SDLReadDataFromFile)
+{
+    if(PlatformNoFileErrors(Source))
+    {
+        sdl_platform_file_handle *Handle = (sdl_platform_file_handle *)Source;
+
+        uint32 FileSize32 = SafeTruncateUInt64(Size);
+
+        uint8 *DestLocation = (uint8*)Dest;
+        while (FileSize32)
+        {
+            ssize_t BytesRead = pread(Handle->SDLHandle, DestLocation, FileSize32, Offset);
+            if (BytesRead != -1)
+            {
+                // NOTE(casey): File read succeeded!
+                FileSize32 -= BytesRead;
+                DestLocation += BytesRead;
+            }
+            else
+            {
+                SDLFileError(&Handle->H, "Read file failed.");
+                break;
+            }
+        }
+    }
+}
+
+/*
+
+internal PLATFORM_FILE_ERROR(SDLCloseFile)
+{
+    close(FileHandle);
+}
+
+*/
 
 int
 main(int argc, char *argv[])
