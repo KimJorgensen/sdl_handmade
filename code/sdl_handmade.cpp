@@ -1017,10 +1017,6 @@ internal PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(SDLGetAllFilesOfTypeBegin)
     {
         while((DirEntry = readdir(Dir)) != NULL)
         {
-            char *filename = DirEntry->d_name;
-
-            printf("%s\n", filename);
-
             if(fnmatch(FilePattern, DirEntry->d_name, 0) == 0)
             {
                 // TODO: Store filename
@@ -1041,7 +1037,19 @@ internal PLATFORM_GET_ALL_FILE_OF_TYPE_END(SDLGetAllFilesOfTypeEnd)
 internal PLATFORM_OPEN_FILE(SDLOpenFile)
 {
     // TODO(casey): Actually implement this!
-    char *FileName = "test.hha";
+    char *FileName = "invalid.hha";
+    if(FileIndex == 0)
+    {
+        FileName = "test1.hha";
+    }
+    else if(FileIndex == 1)
+    {
+        FileName = "test2.hha";
+    }
+    else if(FileIndex == 2)
+    {
+        FileName = "test3.hha";
+    }
 
     // TODO(casey): If we want, someday, make an actual arena
     sdl_platform_file_handle *Result = (sdl_platform_file_handle *)malloc(
