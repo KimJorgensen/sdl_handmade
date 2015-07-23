@@ -1003,62 +1003,105 @@ struct sdl_platform_file_handle
     int SDLHandle;
 };
 
+struct sdl_platform_file_group
+{
+    platform_file_group H;
+    char WildCard[32];
+    DIR *DirHandle;
+    struct dirent *DirEntry;
+};
+
 internal PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(SDLGetAllFilesOfTypeBegin)
 {
-    platform_file_group FileGroup = {};
+    // TODO(casey): If we want, someday, make an actual arena
+    sdl_platform_file_group *SDLFileGroup = (sdl_platform_file_group *)malloc(
+        sizeof(sdl_platform_file_group));
 
-    char FilePattern[64];
-    sprintf(FilePattern, "*.%s", Type);
+    sprintf(SDLFileGroup->WildCard, "*.%s", Type);
 
-    DIR *Dir = opendir(".");
+    SDLFileGroup->H.FileCount = 0;
+
     struct dirent *DirEntry;
-
-    if(Dir)
+    DIR *DirHandle = opendir(".");
+    if(DirHandle)
     {
-        while((DirEntry = readdir(Dir)) != NULL)
+        while((DirEntry = readdir(DirHandle)) != 0)
         {
-            if(fnmatch(FilePattern, DirEntry->d_name, 0) == 0)
+            if(fnmatch(SDLFileGroup->WildCard, DirEntry->d_name, 0) == 0)
             {
-                // TODO: Store filename
-                FileGroup.FileCount++;
+                ++SDLFileGroup->H.FileCount;
             }
         }
 
-        closedir(Dir);
+        closedir(DirHandle);
     }
 
-    return(FileGroup);
+    SDLFileGroup->DirHandle = opendir(".");
+    if(SDLFileGroup->DirHandle)
+    {
+        while((SDLFileGroup->DirEntry = readdir(SDLFileGroup->DirHandle)) != 0)
+        {
+            if(fnmatch(SDLFileGroup->WildCard, SDLFileGroup->DirEntry->d_name, 0) == 0)
+            {
+                break;
+            }
+        }
+
+        if(!SDLFileGroup->DirEntry)
+        {
+            closedir(SDLFileGroup->DirHandle);
+            SDLFileGroup->DirHandle = 0;
+        }
+    }
+
+    return((platform_file_group *)SDLFileGroup);
 }
 
 internal PLATFORM_GET_ALL_FILE_OF_TYPE_END(SDLGetAllFilesOfTypeEnd)
 {
+    sdl_platform_file_group *SDLFileGroup = (sdl_platform_file_group *)FileGroup;
+    if(SDLFileGroup)
+    {
+        if(SDLFileGroup->DirHandle)
+        {
+            closedir(SDLFileGroup->DirHandle);
+        }
+
+        free(SDLFileGroup);
+    }
 }
 
-internal PLATFORM_OPEN_FILE(SDLOpenFile)
+internal PLATFORM_OPEN_FILE(SDLOpenNextFile)
 {
-    // TODO(casey): Actually implement this!
-    char *FileName = "invalid.hha";
-    if(FileIndex == 0)
-    {
-        FileName = "test1.hha";
-    }
-    else if(FileIndex == 1)
-    {
-        FileName = "test2.hha";
-    }
-    else if(FileIndex == 2)
-    {
-        FileName = "test3.hha";
-    }
+    sdl_platform_file_group *SDLFileGroup = (sdl_platform_file_group *)FileGroup;
+    sdl_platform_file_handle *Result = 0;
 
-    // TODO(casey): If we want, someday, make an actual arena
-    sdl_platform_file_handle *Result = (sdl_platform_file_handle *)malloc(
-        sizeof(sdl_platform_file_handle));
-
-    if(Result)
+    if(SDLFileGroup->DirHandle)
     {
-        Result->SDLHandle = open(FileName, O_RDONLY);
-        Result->H.NoErrors = (Result->SDLHandle != -1);
+        // TODO(casey): If we want, someday, make an actual arena
+        Result = (sdl_platform_file_handle *)malloc(
+            sizeof(sdl_platform_file_handle));
+
+        if(Result)
+        {
+            char *FileName = SDLFileGroup->DirEntry->d_name;
+            Result->SDLHandle = open(FileName, O_RDONLY);
+            Result->H.NoErrors = (Result->SDLHandle != -1);
+        }
+
+        while((SDLFileGroup->DirEntry = readdir(SDLFileGroup->DirHandle)) != 0)
+        {
+            if(fnmatch(SDLFileGroup->WildCard, SDLFileGroup->DirEntry->d_name, 0) == 0)
+            {
+                break;
+            }
+        }
+
+        if(!SDLFileGroup->DirEntry)
+        {
+            closedir(SDLFileGroup->DirHandle);
+            SDLFileGroup->DirHandle = 0;
+        }
     }
 
     return((platform_file_handle *)Result);
@@ -1257,7 +1300,7 @@ main(int argc, char *argv[])
 
             GameMemory.PlatformAPI.GetAllFilesOfTypeBegin = SDLGetAllFilesOfTypeBegin;
             GameMemory.PlatformAPI.GetAllFilesOfTypeEnd = SDLGetAllFilesOfTypeEnd;
-            GameMemory.PlatformAPI.OpenFile = SDLOpenFile;
+            GameMemory.PlatformAPI.OpenNextFile = SDLOpenNextFile;
             GameMemory.PlatformAPI.ReadDataFromFile = SDLReadDataFromFile;
             GameMemory.PlatformAPI.FileError = SDLFileError;
 
