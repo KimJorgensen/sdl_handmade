@@ -29,11 +29,10 @@
 #include "handmade_platform.h"
 
 #include <SDL.h>
-#include <dirent.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <fnmatch.h>
+#include <glob.h>
 #include <dlfcn.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -1006,53 +1005,21 @@ struct sdl_platform_file_handle
 struct sdl_platform_file_group
 {
     platform_file_group H;
-    char WildCard[32];
-    DIR *DirHandle;
-    struct dirent *DirEntry;
+    uint32 FileIndex;
+    glob_t GlobData;
 };
 
 internal PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(SDLGetAllFilesOfTypeBegin)
 {
     // TODO(casey): If we want, someday, make an actual arena
-    sdl_platform_file_group *SDLFileGroup = (sdl_platform_file_group *)malloc(
-        sizeof(sdl_platform_file_group));
+    sdl_platform_file_group *SDLFileGroup = (sdl_platform_file_group *)calloc(
+        1, sizeof(sdl_platform_file_group));
 
-    sprintf(SDLFileGroup->WildCard, "*.%s", Type);
+    char WildCard[32];
+    snprintf(WildCard, ArrayCount(WildCard), "*.%s", Type);
 
-    SDLFileGroup->H.FileCount = 0;
-
-    struct dirent *DirEntry;
-    DIR *DirHandle = opendir(".");
-    if(DirHandle)
-    {
-        while((DirEntry = readdir(DirHandle)) != 0)
-        {
-            if(fnmatch(SDLFileGroup->WildCard, DirEntry->d_name, 0) == 0)
-            {
-                ++SDLFileGroup->H.FileCount;
-            }
-        }
-
-        closedir(DirHandle);
-    }
-
-    SDLFileGroup->DirHandle = opendir(".");
-    if(SDLFileGroup->DirHandle)
-    {
-        while((SDLFileGroup->DirEntry = readdir(SDLFileGroup->DirHandle)) != 0)
-        {
-            if(fnmatch(SDLFileGroup->WildCard, SDLFileGroup->DirEntry->d_name, 0) == 0)
-            {
-                break;
-            }
-        }
-
-        if(!SDLFileGroup->DirEntry)
-        {
-            closedir(SDLFileGroup->DirHandle);
-            SDLFileGroup->DirHandle = 0;
-        }
-    }
+    glob(WildCard, 0, 0, &SDLFileGroup->GlobData);
+    SDLFileGroup->H.FileCount = SDLFileGroup->GlobData.gl_pathc;
 
     return((platform_file_group *)SDLFileGroup);
 }
@@ -1062,10 +1029,7 @@ internal PLATFORM_GET_ALL_FILE_OF_TYPE_END(SDLGetAllFilesOfTypeEnd)
     sdl_platform_file_group *SDLFileGroup = (sdl_platform_file_group *)FileGroup;
     if(SDLFileGroup)
     {
-        if(SDLFileGroup->DirHandle)
-        {
-            closedir(SDLFileGroup->DirHandle);
-        }
+        globfree(&SDLFileGroup->GlobData);
 
         free(SDLFileGroup);
     }
@@ -1076,7 +1040,7 @@ internal PLATFORM_OPEN_FILE(SDLOpenNextFile)
     sdl_platform_file_group *SDLFileGroup = (sdl_platform_file_group *)FileGroup;
     sdl_platform_file_handle *Result = 0;
 
-    if(SDLFileGroup->DirHandle)
+    if(SDLFileGroup->FileIndex < SDLFileGroup->GlobData.gl_pathc)
     {
         // TODO(casey): If we want, someday, make an actual arena
         Result = (sdl_platform_file_handle *)malloc(
@@ -1084,23 +1048,9 @@ internal PLATFORM_OPEN_FILE(SDLOpenNextFile)
 
         if(Result)
         {
-            char *FileName = SDLFileGroup->DirEntry->d_name;
+            char *FileName = SDLFileGroup->GlobData.gl_pathv[SDLFileGroup->FileIndex++];
             Result->SDLHandle = open(FileName, O_RDONLY);
             Result->H.NoErrors = (Result->SDLHandle != -1);
-        }
-
-        while((SDLFileGroup->DirEntry = readdir(SDLFileGroup->DirHandle)) != 0)
-        {
-            if(fnmatch(SDLFileGroup->WildCard, SDLFileGroup->DirEntry->d_name, 0) == 0)
-            {
-                break;
-            }
-        }
-
-        if(!SDLFileGroup->DirEntry)
-        {
-            closedir(SDLFileGroup->DirHandle);
-            SDLFileGroup->DirHandle = 0;
         }
     }
 
