@@ -1102,6 +1102,28 @@ internal PLATFORM_FILE_ERROR(SDLCloseFile)
 
 */
 
+PLATFORM_ALLOCATE_MEMORY(SDLAllocateMemory)
+{
+    memory_index TotalSize = Size + sizeof(memory_index);
+
+    memory_index *Result = (memory_index *)mmap(0, TotalSize,
+        PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    *Result++ = TotalSize;
+
+    return(Result);
+}
+
+PLATFORM_DEALLOCATE_MEMORY(SDLDeallocateMemory)
+{
+    if(Memory)
+    {
+        memory_index *TotalMemory = ((memory_index *)Memory) - 1;
+        memory_index Size = *TotalMemory;
+
+        munmap(TotalMemory, Size);
+    }
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -1253,6 +1275,9 @@ main(int argc, char *argv[])
             GameMemory.PlatformAPI.OpenNextFile = SDLOpenNextFile;
             GameMemory.PlatformAPI.ReadDataFromFile = SDLReadDataFromFile;
             GameMemory.PlatformAPI.FileError = SDLFileError;
+
+            GameMemory.PlatformAPI.AllocateMemory = SDLAllocateMemory;
+            GameMemory.PlatformAPI.DeallocateMemory = SDLDeallocateMemory;
 
             GameMemory.PlatformAPI.DEBUGFreeFileMemory = DEBUGPlatformFreeFileMemory;
             GameMemory.PlatformAPI.DEBUGReadEntireFile = DEBUGPlatformReadEntireFile;
