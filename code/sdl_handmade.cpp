@@ -998,35 +998,49 @@ SDLMakeQueue(platform_work_queue *Queue, uint32 ThreadCount)
 
 struct sdl_platform_file_handle
 {
-    platform_file_handle H;
     int SDLHandle;
 };
 
 struct sdl_platform_file_group
 {
-    platform_file_group H;
     uint32 FileIndex;
     glob_t GlobData;
 };
 
 internal PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(SDLGetAllFilesOfTypeBegin)
 {
+    platform_file_group Result = {};
+
     // TODO(casey): If we want, someday, make an actual arena
     sdl_platform_file_group *SDLFileGroup = (sdl_platform_file_group *)calloc(
         1, sizeof(sdl_platform_file_group));
+    Result.Platform = SDLFileGroup;
 
-    char WildCard[32];
-    snprintf(WildCard, ArrayCount(WildCard), "*.%s", Type);
+    char *WildCard = "*.*";
+    switch(Type)
+    {
+        case PlatformFileType_AssetFile:
+        {
+            WildCard = "*.hha";
+        } break;
+
+        case PlatformFileType_SavedGameFile:
+        {
+            WildCard = "*.hhs";
+        } break;
+
+        InvalidDefaultCase;
+    }
 
     glob(WildCard, 0, 0, &SDLFileGroup->GlobData);
-    SDLFileGroup->H.FileCount = SDLFileGroup->GlobData.gl_pathc;
+    Result.FileCount = SDLFileGroup->GlobData.gl_pathc;
 
-    return((platform_file_group *)SDLFileGroup);
+    return(Result);
 }
 
 internal PLATFORM_GET_ALL_FILE_OF_TYPE_END(SDLGetAllFilesOfTypeEnd)
 {
-    sdl_platform_file_group *SDLFileGroup = (sdl_platform_file_group *)FileGroup;
+    sdl_platform_file_group *SDLFileGroup = (sdl_platform_file_group *)FileGroup->Platform;
     if(SDLFileGroup)
     {
         globfree(&SDLFileGroup->GlobData);
@@ -1037,24 +1051,25 @@ internal PLATFORM_GET_ALL_FILE_OF_TYPE_END(SDLGetAllFilesOfTypeEnd)
 
 internal PLATFORM_OPEN_FILE(SDLOpenNextFile)
 {
-    sdl_platform_file_group *SDLFileGroup = (sdl_platform_file_group *)FileGroup;
-    sdl_platform_file_handle *Result = 0;
+    sdl_platform_file_group *SDLFileGroup = (sdl_platform_file_group *)FileGroup->Platform;
+    platform_file_handle Result = {};
 
     if(SDLFileGroup->FileIndex < SDLFileGroup->GlobData.gl_pathc)
     {
         // TODO(casey): If we want, someday, make an actual arena
-        Result = (sdl_platform_file_handle *)malloc(
+        sdl_platform_file_handle *SDLHandle = (sdl_platform_file_handle *)malloc(
             sizeof(sdl_platform_file_handle));
+        Result.Platform = SDLHandle;
 
-        if(Result)
+        if(SDLHandle)
         {
             char *FileName = SDLFileGroup->GlobData.gl_pathv[SDLFileGroup->FileIndex++];
-            Result->SDLHandle = open(FileName, O_RDONLY);
-            Result->H.NoErrors = (Result->SDLHandle != -1);
+            SDLHandle->SDLHandle = open(FileName, O_RDONLY);
+            Result.NoErrors = (SDLHandle->SDLHandle != -1);
         }
     }
 
-    return((platform_file_handle *)Result);
+    return(Result);
 }
 
 internal PLATFORM_FILE_ERROR(SDLFileError)
@@ -1070,7 +1085,7 @@ internal PLATFORM_READ_DATA_FROM_FILE(SDLReadDataFromFile)
 {
     if(PlatformNoFileErrors(Source))
     {
-        sdl_platform_file_handle *Handle = (sdl_platform_file_handle *)Source;
+        sdl_platform_file_handle *Handle = (sdl_platform_file_handle *)Source->Platform;
 
         uint32 FileSize32 = SafeTruncateUInt64(Size);
 
@@ -1086,7 +1101,7 @@ internal PLATFORM_READ_DATA_FROM_FILE(SDLReadDataFromFile)
             }
             else
             {
-                SDLFileError(&Handle->H, "Read file failed.");
+                SDLFileError(Source, "Read file failed.");
                 break;
             }
         }
