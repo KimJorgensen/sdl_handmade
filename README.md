@@ -5,7 +5,7 @@ This is an implementation of a SDL platform layer for [Handmade Hero](http://han
 The following notable changes has been made to Handmade Penguin:
 
 * Updated to work with Casey's latest source code (at least for now)
-* Added looped live code editing support
+* Added looped live code editing and multithreading support
 * Uses SDL_QueueAudio instead of a ring buffer
 * Restructured `sdl_handmade` to make it easy to compare to `win32_handmade`
 
@@ -13,7 +13,7 @@ The following notable changes has been made to Handmade Penguin:
 
 You will need the Handmade Hero source code for the platform-independent game code and the game assets. Pre-order the game to get these.
 
-Copy the Handmade Hero source files into `sdl_handmade/code/` and copy the Handmade Hero test assets into `sdl_handmade/ref/assets/`.
+Copy the Handmade Hero source files into `sdl_handmade/code/` and copy the Handmade Hero test assets into `sdl_handmade/data/`.
 
 Compile it with `./build.sh` and run it with `./handmade.sh`.
 
