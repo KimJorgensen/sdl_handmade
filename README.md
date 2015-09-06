@@ -1,3 +1,6 @@
+**Note: This repository has moved to the private [Handmade Hero repository](https://github.com/HandmadeHero/sdl) and is no longer actively maintained.**
+**You will need to pre-order the game to get access.**
+
 # SDL Handmade
 
 This is an implementation of a SDL platform layer for [Handmade Hero](http://handmadehero.org/), based on David Gow's excellent SDL port [Handmade Penguin](http://davidgow.net/handmadepenguin/).
